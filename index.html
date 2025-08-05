@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Broadcast Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom CSS for charts */
+        canvas {
+            -moz-user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen flex">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-800 text-gray-100 flex-shrink-0 p-6 rounded-r-lg shadow-2xl">
+        <div class="flex items-center space-x-3 mb-8">
+            <i class="fas fa-broadcast-tower text-3xl text-blue-500"></i>
+            <h1 class="text-2xl font-bold">BroadCast</h1>
+        </div>
+        <nav>
+            <ul class="space-y-3">
+                <li>
+                    <a href="#" class="flex items-center space-x-3 p-3 rounded-lg bg-gray-700 text-white transition-colors duration-200">
+                        <i class="fas fa-tachometer-alt"></i>
+                        <span class="font-medium">Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center space-x-3 p-3 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors duration-200">
+                        <i class="fas fa-sitemap"></i>
+                        <span class="font-medium">Pipelines</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center space-x-3 p-3 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors duration-200">
+                        <i class="fas fa-server"></i>
+                        <span class="font-medium">Devices</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="#" class="flex items-center space-x-3 p-3 rounded-lg text-gray-300 hover:bg-gray-700 hover:text-white transition-colors duration-200">
+                        <i class="fas fa-photo-video"></i>
+                        <span class="font-medium">Media</span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 p-4 sm:p-8 overflow-y-auto">
+        <!-- Dashboard Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-white mb-2">Live Broadcast Dashboard</h1>
+            <p class="text-gray-400 text-lg">A real-time overview of pipeline and device health.</p>
+        </header>
+
+        <!-- Pipeline Section -->
+        <section class="mb-10">
+            <h2 class="text-2xl sm:text-3xl font-semibold text-gray-200 mb-4">Pipelines</h2>
+            <div id="pipeline-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Pipeline Cards will be dynamically generated here -->
+            </div>
+        </section>
+
+        <!-- Device Section -->
+        <section>
+            <h2 class="text-2xl sm:text-3xl font-semibold text-gray-200 mb-4">Devices</h2>
+            <div id="device-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Device Cards will be dynamically generated here -->
+            </div>
+        </section>
+    </div>
+
+    <script>
+        // --- Data & State Management ---
+        const pipelines = [
+            { id: 'pipeline-1', name: 'Ingest Pipeline', latency: [], packetLoss: [], status: 'ok' },
+            { id: 'pipeline-2', name: 'Processing Pipeline', latency: [], packetLoss: [], status: 'warning' },
+            { id: 'pipeline-3', name: 'Distribution Pipeline', latency: [], packetLoss: [], status: 'critical' },
+        ];
+
+        const devices = [
+            { id: 'device-1', name: 'Encoder A', cpu: [], gpu: [], networkLatency: [], memory: [], status: 'ok', network: 'online', sdi: 'active' },
+            { id: 'device-2', name: 'Decoder B', cpu: [], gpu: [], networkLatency: [], memory: [], status: 'warning', network: 'degraded', sdi: 'warning' },
+            { id: 'device-3', name: 'Switch C', cpu: [], gpu: [], networkLatency: [], memory: [], status: 'critical', network: 'offline', sdi: 'error' },
+        ];
+
+        const maxDataPoints = 20;
+
+        // --- Utility Functions ---
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function getStatusColor(status) {
+            switch (status) {
+                case 'ok': return 'bg-green-500';
+                case 'warning': return 'bg-yellow-500';
+                case 'critical': return 'bg-red-500';
+                default: return 'bg-gray-400';
+            }
+        }
+
+        function getStatusText(status) {
+            switch (status) {
+                case 'ok': return 'Operational';
+                case 'warning': return 'Warning';
+                case 'critical': return 'Critical';
+                default: return 'Unknown';
+            }
+        }
+
+        // --- Chart Drawing Functions ---
+
+        /**
+         * Draws a line chart on a canvas.
+         * @param {string} canvasId The ID of the canvas element.
+         * @param {Array<number>} data The array of data points for the graph.
+         * @param {string} lineColor The color of the line.
+         * @param {number} maxValue The maximum value for the Y-axis.
+         */
+        function drawLineChart(canvasId, data, lineColor, maxValue) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw a subtle grid
+            ctx.beginPath();
+            ctx.strokeStyle = '#374151'; // gray-700
+            ctx.lineWidth = 1;
+            const numLines = 5;
+            for (let i = 1; i < numLines; i++) {
+                const y = (height / numLines) * i;
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+
+            const maxVal = maxValue > 0 ? maxValue : 100;
+            const range = maxVal;
+
+            ctx.beginPath();
+            ctx.strokeStyle = lineColor;
+            ctx.lineWidth = 2;
+
+            if (data.length > 0) {
+                const xStep = width / (maxDataPoints - 1);
+                ctx.moveTo(0, height - ((data[0] / range) * height));
+                for (let i = 1; i < data.length; i++) {
+                    const x = xStep * i;
+                    const y = height - ((data[i] / range) * height);
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+        }
+
+        /**
+         * Draws a bar chart on a canvas.
+         * @param {string} canvasId The ID of the canvas element.
+         * @param {Array<number>} data The array of data points.
+         * @param {string} barColor The color of the bars.
+         * @param {number} maxValue The maximum value for the Y-axis.
+         */
+        function drawBarChart(canvasId, data, barColor, maxValue) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            const maxVal = maxValue > 0 ? maxValue : 100;
+            const barWidth = width / (data.length * 1.5);
+            const gap = barWidth / 2;
+
+            ctx.fillStyle = barColor;
+
+            data.forEach((value, index) => {
+                const x = index * (barWidth + gap) + gap;
+                const barHeight = (value / maxVal) * height;
+                const y = height - barHeight;
+                ctx.fillRect(x, y, barWidth, barHeight);
+            });
+        }
+        
+        /**
+         * Draws a bar chart for a single value on a small canvas.
+         * @param {string} canvasId The ID of the canvas element.
+         * @param {number} value The current value.
+         * @param {string} barColor The color of the bar.
+         */
+        function drawSingleBarChart(canvasId, value, barColor) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            ctx.clearRect(0, 0, width, height);
+
+            const barWidth = width * 0.8;
+            const barHeight = height * 0.5;
+            const x = (width - barWidth) / 2;
+            const y = (height - barHeight) / 2;
+
+            ctx.fillStyle = '#374151'; // gray-700
+            ctx.fillRect(x, y, barWidth, barHeight);
+            
+            const fillWidth = barWidth * (value / 100);
+            ctx.fillStyle = barColor;
+            ctx.fillRect(x, y, fillWidth, barHeight);
+        }
+
+        // --- Dashboard Rendering ---
+        function renderDashboard() {
+            const pipelineContainer = document.getElementById('pipeline-container');
+            const deviceContainer = document.getElementById('device-container');
+            pipelineContainer.innerHTML = '';
+            deviceContainer.innerHTML = '';
+
+            // Render Pipeline Cards
+            pipelines.forEach(pipeline => {
+                const statusColor = getStatusColor(pipeline.status);
+                const statusText = getStatusText(pipeline.status);
+                const lineColor = (pipeline.status === 'ok' ? '#10B981' : pipeline.status === 'warning' ? '#F59E0B' : '#EF4444');
+                const barColor = (pipeline.status === 'ok' ? '#10B981' : pipeline.status === 'warning' ? '#F59E0B' : '#EF4444');
+
+                const card = `
+                    <div class="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-xl font-bold">${pipeline.name}</h3>
+                            <div class="flex items-center space-x-2">
+                                <span class="w-3 h-3 rounded-full ${statusColor}"></span>
+                                <span class="text-sm font-semibold text-gray-400">${statusText}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Graphs Container -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <!-- Latency Chart -->
+                            <div>
+                                <h4 class="text-sm font-semibold text-gray-400 mb-1">Latency (ms): <span id="latency-value-${pipeline.id}">${pipeline.latency[pipeline.latency.length - 1] || 0}</span></h4>
+                                <div class="bg-gray-700 rounded-md p-2 h-28">
+                                    <canvas id="latency-${pipeline.id}"></canvas>
+                                </div>
+                            </div>
+                            
+                            <!-- Packet Loss Chart -->
+                            <div>
+                                <h4 class="text-sm font-semibold text-gray-400 mb-1">Packet Loss (%): <span id="packet-loss-value-${pipeline.id}">${pipeline.packetLoss[pipeline.packetLoss.length - 1] || 0}</span></h4>
+                                <div class="bg-gray-700 rounded-md p-2 h-28">
+                                    <canvas id="packet-loss-${pipeline.id}"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                pipelineContainer.innerHTML += card;
+            });
+
+            // Render Device Cards
+            devices.forEach(device => {
+                const statusColor = getStatusColor(device.status);
+                const statusText = getStatusText(device.status);
+                const networkColor = device.network === 'online' ? 'text-green-500' : device.network === 'degraded' ? 'text-yellow-500' : 'text-red-500';
+                const sdiColor = device.sdi === 'active' ? 'text-green-500' : device.sdi === 'warning' ? 'text-yellow-500' : 'text-red-500';
+                const barColor = (device.status === 'ok' ? '#10B981' : device.status === 'warning' ? '#F59E0B' : '#EF4444');
+
+                const card = `
+                    <div class="bg-gray-800 rounded-lg shadow-lg p-6 flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-xl font-bold">${device.name}</h3>
+                            <div class="flex items-center space-x-2">
+                                <span class="w-3 h-3 rounded-full ${statusColor}"></span>
+                                <span class="text-sm font-semibold text-gray-400">${statusText}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Mini-Graphs for Device Metrics -->
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <!-- CPU Usage -->
+                            <div class="flex items-center space-x-2">
+                                <div class="w-16 h-12 bg-gray-700 rounded-md p-1 flex items-center justify-center">
+                                    <canvas id="cpu-usage-${device.id}" width="40" height="20"></canvas>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-semibold text-gray-400">CPU Usage</h4>
+                                    <span class="text-sm text-white">${device.cpu[device.cpu.length - 1] || 0}%</span>
+                                </div>
+                            </div>
+                            <!-- GPU Usage -->
+                            <div class="flex items-center space-x-2">
+                                <div class="w-16 h-12 bg-gray-700 rounded-md p-1 flex items-center justify-center">
+                                    <canvas id="gpu-usage-${device.id}" width="40" height="20"></canvas>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-semibold text-gray-400">GPU Usage</h4>
+                                    <span class="text-sm text-white">${device.gpu[device.gpu.length - 1] || 0}%</span>
+                                </div>
+                            </div>
+                            <!-- Network Latency -->
+                            <div class="flex items-center space-x-2">
+                                <div class="w-16 h-12 bg-gray-700 rounded-md p-1 flex items-center justify-center">
+                                    <canvas id="network-latency-${device.id}" width="40" height="20"></canvas>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-semibold text-gray-400">Network Latency</h4>
+                                    <span class="text-sm text-white">${device.networkLatency[device.networkLatency.length - 1] || 0}ms</span>
+                                </div>
+                            </div>
+                            <!-- Memory Usage -->
+                            <div class="flex items-center space-x-2">
+                                <div class="w-16 h-12 bg-gray-700 rounded-md p-1 flex items-center justify-center">
+                                    <canvas id="memory-usage-${device.id}" width="40" height="20"></canvas>
+                                </div>
+                                <div>
+                                    <h4 class="text-xs font-semibold text-gray-400">Memory Usage</h4>
+                                    <span class="text-sm text-white">${device.memory[device.memory.length - 1] || 0}%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Device Statuses -->
+                        <div class="grid grid-cols-2 gap-4 text-sm text-gray-300">
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-network-wired ${networkColor}"></i>
+                                <span class="font-semibold text-gray-400">Network:</span>
+                                <span class="${networkColor} capitalize">${device.network}</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <i class="fas fa-video ${sdiColor}"></i>
+                                <span class="font-semibold text-gray-400">SDI I/O:</span>
+                                <span class="${sdiColor} capitalize">${device.sdi}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                deviceContainer.innerHTML += card;
+            });
+
+            // After rendering cards, draw the charts on the newly created canvases/SVGs
+            pipelines.forEach(pipeline => {
+                const lineColor = (pipeline.status === 'ok' ? '#10B981' : pipeline.status === 'warning' ? '#F59E0B' : '#EF4444');
+                const barColor = (pipeline.status === 'ok' ? '#10B981' : pipeline.status === 'warning' ? '#F59E0B' : '#EF4444');
+
+                drawLineChart(`latency-${pipeline.id}`, pipeline.latency, lineColor, 100);
+                drawBarChart(`packet-loss-${pipeline.id}`, pipeline.packetLoss, barColor, 1); // Max packet loss value is 1
+            });
+            devices.forEach(device => {
+                const barColor = (device.status === 'ok' ? '#10B981' : device.status === 'warning' ? '#F59E0B' : '#EF4444');
+                drawSingleBarChart(`cpu-usage-${device.id}`, device.cpu[device.cpu.length - 1] || 0, barColor);
+                drawSingleBarChart(`gpu-usage-${device.id}`, device.gpu[device.gpu.length - 1] || 0, barColor);
+                drawLineChart(`network-latency-${device.id}`, device.networkLatency, barColor, 100);
+                drawSingleBarChart(`memory-usage-${device.id}`, device.memory[device.memory.length - 1] || 0, barColor);
+            });
+        }
+
+        // --- Data Update Logic (the "Live" part) ---
+        function updateData() {
+            // Update Pipelines
+            pipelines.forEach(pipeline => {
+                const newLatency = getRandomInt(10, 50);
+                pipeline.latency.push(newLatency);
+                if (pipeline.latency.length > maxDataPoints) {
+                    pipeline.latency.shift();
+                }
+
+                // Simulate packet loss based on status
+                let newPacketLoss;
+                if (pipeline.status === 'ok') {
+                    newPacketLoss = getRandomInt(0, 10) / 1000;
+                } else if (pipeline.status === 'warning') {
+                    newPacketLoss = getRandomInt(10, 50) / 1000;
+                } else {
+                    newPacketLoss = getRandomInt(50, 100) / 1000;
+                }
+                pipeline.packetLoss.push(newPacketLoss);
+                if (pipeline.packetLoss.length > maxDataPoints) {
+                    pipeline.packetLoss.shift();
+                }
+            });
+
+            // Update Devices
+            devices.forEach(device => {
+                // Simulate CPU/GPU usage based on status
+                let totalUsage;
+                if (device.status === 'ok') {
+                    totalUsage = getRandomInt(30, 60);
+                } else if (device.status === 'warning') {
+                    totalUsage = getRandomInt(60, 85);
+                } else {
+                    totalUsage = getRandomInt(85, 99);
+                }
+                const cpuShare = getRandomInt(40, 60); // Randomly split usage between CPU/GPU
+                device.cpu.push(Math.round(totalUsage * (cpuShare / 100)));
+                device.gpu.push(Math.round(totalUsage * (100 - cpuShare) / 100));
+                
+                // Simulate network latency and memory
+                let newNetworkLatency;
+                let newMemoryUsage;
+                if (device.status === 'ok') {
+                    newNetworkLatency = getRandomInt(1, 10);
+                    newMemoryUsage = getRandomInt(20, 40);
+                } else if (device.status === 'warning') {
+                    newNetworkLatency = getRandomInt(10, 50);
+                    newMemoryUsage = getRandomInt(40, 70);
+                } else {
+                    newNetworkLatency = getRandomInt(50, 150);
+                    newMemoryUsage = getRandomInt(70, 95);
+                }
+                device.networkLatency.push(newNetworkLatency);
+                device.memory.push(newMemoryUsage);
+
+                // Trim arrays to maxDataPoints
+                if (device.cpu.length > maxDataPoints) device.cpu.shift();
+                if (device.gpu.length > maxDataPoints) device.gpu.shift();
+                if (device.networkLatency.length > maxDataPoints) device.networkLatency.shift();
+                if (device.memory.length > maxDataPoints) device.memory.shift();
+            });
+
+            // Re-render the dashboard with the new data
+            renderDashboard();
+        }
+
+        // --- Initialization ---
+        window.onload = function() {
+            // Initial render
+            updateData();
+            // Start the live update loop
+            setInterval(updateData, 2000); // Update every 2 seconds
+        };
+    </script>
+</body>
+</html>
